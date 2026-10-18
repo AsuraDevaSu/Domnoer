@@ -1,4 +1,4 @@
-// TerraRoute Cambodia — GIS Dataset & Corridor Navigation Data
+// Domnoer — GIS Dataset & Corridor Navigation Data
 
 export const CAMBODIA_PROVINCES = [
   { id: 'siem_reap', nameEn: 'Siem Reap', nameKm: 'ខេត្តសៀមរាប', region: 'Northwest', tripsCount: 5, highway: 'NR6 Asphalt', distanceKm: 314, lat: 13.3671, lng: 103.8448, statusColor: 'emerald', statusText: 'Optimal Paved', desc: 'Angkor Wat, Tonle Sap & UNESCO heritage sanctuaries' },
@@ -369,7 +369,7 @@ export const MAP_TILE_LAYERS = [
 // Bilingual strings dictionary
 export const UI_STRINGS = {
   km: {
-    brand: 'TerraRoute Cambodia',
+    brand: 'Domnoer',
     subtitle: 'ផែនទី GIS ទេសចរណ៍ និងប្រព័ន្ធនាំផ្លូវផ្ទាល់',
     gnssHub: 'មជ្ឈមណ្ឌលផ្កាយរណប GNSS:',
     originHub: 'រាជធានីភ្នំពេញ (Phnom Penh)',
@@ -418,7 +418,7 @@ export const UI_STRINGS = {
     routeCalculated: 'ផ្លូវលឿនបំផុតបានគណនាជោគជ័យ'
   },
   en: {
-    brand: 'TerraRoute Cambodia',
+    brand: 'Domnoer',
     subtitle: 'Clean GIS Cartography & Turn-by-Turn Navigation',
     gnssHub: 'GNSS Hub:',
     originHub: 'Phnom Penh Hub',

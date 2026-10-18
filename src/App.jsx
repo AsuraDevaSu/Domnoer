@@ -166,7 +166,7 @@ export default function App() {
     if (!currentRouteCoords || currentRouteCoords.length === 0) return;
 
     let gpxXml = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="TerraRoute Cambodia GIS" xmlns="http://www.topografix.com/GPX/1/1">
+<gpx version="1.1" creator="Domnoer GIS" xmlns="http://www.topografix.com/GPX/1/1">
   <metadata>
     <name>${activeDestination.title} Corridor</name>
     <desc>Road route to ${activeDestination.title}</desc>
@@ -188,7 +188,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `TerraRoute-${activeDestination.id}.gpx`;
+    a.download = `Domnoer-${activeDestination.id}.gpx`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

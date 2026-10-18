@@ -23,7 +23,7 @@ export default function Navbar({ lang, onToggleLang, activeLayer, onChangeLayer,
   return (
     <header className="top-app-header" ref={headerRef}>
       <div className="header-brand-group">
-        <div className="brand-badge" aria-label="TerraRoute"><span className="material-symbols-outlined">explore</span><span className="brand-name">TerraRoute</span></div>
+        <div className="brand-badge" aria-label="Domnoer"><span className="material-symbols-outlined">explore</span><span className="brand-name">Domnoer</span></div>
         <span className="header-origin" title={originLabel}>{originLabel}</span>
       </div>
       <nav className="header-actions" aria-label="Map tools">
