@@ -30,8 +30,11 @@ jobs:
       - run: npm test
 
       - name: Build
-        # Project sites are served from /<repo-name>/, so assets need that base path.
-        run: npm run build -- --base=/${{ github.event.repository.name }}/
+        # <user>.github.io repos are served from /; other repos from /<repo-name>/.
+        run: |
+          REPO="${{ github.event.repository.name }}"
+          if [[ "$REPO" == *.github.io ]]; then BASE=/; else BASE="/$REPO/"; fi
+          npm run build -- --base="$BASE"
         env:
           VITE_MAPBOX_ACCESS_TOKEN: ${{ secrets.VITE_MAPBOX_ACCESS_TOKEN }}
 
