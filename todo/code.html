@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+
+<html lang="km"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>TerraRoute Cambodia - Real-Time Turn-by-Turn Travel Navigation &amp; GIS</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,500&amp;family=Kantumruy+Pro:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Leaflet CSS & JS for Real OpenStreetMap / Esri GIS -->
+<link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              100: '#d1fae5',
+              200: '#a7f3d0',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857',
+              800: '#065f46',
+              900: '#0f382c',
+              950: '#002218',
+            },
+            surface: '#faf8ff',
+            'surface-container': '#eaedff',
+            'surface-container-low': '#f2f3ff',
+            'surface-container-high': '#e2e7ff',
+            'surface-container-highest': '#dae2fd',
+            'on-surface': '#131b2e',
+            'on-surface-variant': '#414845',
+            'inverse-surface': '#283044',
+            'inverse-on-surface': '#eef0ff',
+            primary: '#002218',
+            'primary-container': '#0f382c',
+            'primary-fixed': '#c1ecda',
+            'secondary-container': '#86f2e4',
+            'on-secondary-container': '#006f66',
+            outline: '#717975',
+            'outline-variant': '#c1c8c3'
+          },
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'Kantumruy Pro', 'sans-serif'],
+            km: ['Kantumruy Pro', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+            serif: ['Newsreader', 'Georgia', 'serif'],
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', 'Kantumruy Pro', sans-serif;
+      overscroll-behavior: none;
+    }
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #94a3b8;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .font-km { font-family: 'Kantumruy Pro', sans-serif; }
+    .font-mono-num { font-family: 'JetBrains Mono', monospace; }
+    
+    @keyframes dashFlow {
+      to { stroke-dashoffset: -40; }
+    }
+    @keyframes pulseSoft {
+      0%, 100% { opacity: 0.9; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.08); }
+    }
+    .route-active-stream {
+      stroke-dasharray: 10, 8;
+      animation: dashFlow 1.1s linear infinite;
+    }
+    .route-caution-stream {
+      stroke-dasharray: 8, 7;
+      animation: dashFlow 2s linear infinite;
+    }
+    .hud-pulse {
+      animation: pulseSoft 2.5s ease-in-out infinite;
+    }
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* Custom Leaflet Pin Styling */
+    .custom-province-pin {
+      background: transparent;
+      border: none;
+    }
+    .pin-pulse-halo {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      top: -16px;
+      left: -16px;
+      border-radius: 50%;
+      opacity: 0.25;
+      animation: pulseSoft 2s infinite ease-out;
+    }
+    .pin-core-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2.5px solid #ffffff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+      position: absolute;
+      top: -7px;
+      left: -7px;
+      transition: transform 0.2s ease;
+    }
+    .custom-province-pin:hover .pin-core-dot {
+      transform: scale(1.3);
+    }
+    .pin-label-pill {
+      position: absolute;
+      top: 9px;
+      left: 50%;
+      transform: translateX(-50%);
+      white-space: nowrap;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(4px);
+      padding: 1.5px 6px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #0f172a;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+      border: 1px solid rgba(226, 232, 240, 0.9);
+      pointer-events: none;
+      font-family: 'Plus Jakarta Sans', 'Kantumruy Pro', sans-serif;
+    }
+    .pin-label-pill.selected {
+      background: #002218;
+      color: #ffffff;
+      border-color: #059669;
+      font-size: 12px;
+      box-shadow: 0 4px 10px rgba(0,34,24,0.35);
+    }
+
+    /* Moving Vehicle Marker */
+    .vehicle-marker-icon {
+      transition: transform 0.15s cubic-bezier(0,0,0.2,1);
+    }
+
+    /* Customize Leaflet Control position */
+    .leaflet-bottom.leaflet-right {
+      margin-bottom: 90px;
+      margin-right: 14px;
+    }
+    .leaflet-control-attribution {
+      background: rgba(255,255,255,0.85) !important;
+      font-size: 10px !important;
+      border-radius: 6px;
+      margin: 4px !important;
+      backdrop-filter: blur(4px);
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-800 antialiased h-screen w-screen overflow-hidden relative select-none font-sans" id="appBody">
+<!-- ================= 1. REAL INTERACTIVE OPENSTREETMAP CONTAINER ================= -->
+<div class="absolute inset-0 w-full h-full z-0" id="map"></div>
+<!-- Midpoint Roadwork & Caution Floating Pin on Map -->
+<div class="absolute pointer-events-auto transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300 z-10" id="midpointCautionTag" style="top: 48%; left: 49%; display: block;">
+<div class="bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-xl border border-amber-300 flex items-center gap-2 text-xs">
+<span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0"></span>
+<span class="font-bold text-slate-800" id="midpointCautionTitle">KM 165 Kampong Thom Roadworks</span>
+<span class="text-amber-800 font-km text-[11px] font-medium" id="midpointCautionKm">(កំណាត់ជួសជុល ៣៥ គ.ម/ម៉)</span>
+</div>
+</div>
+<!-- ================= 2. TOP FLOATING APP BAR & GNSS HUB MONITOR ================= -->
+<header class="absolute top-4 left-4 right-4 z-30 flex items-center justify-between pointer-events-none">
+<!-- Brand Identity & Departure Origin Hub -->
+<div class="flex items-center gap-2 pointer-events-auto">
+<!-- Departure Hub & Live GNSS Telemetry -->
+<div class="hidden md:flex items-center gap-2.5 bg-white/90 backdrop-blur-md px-3.5 py-2 rounded-2xl shadow-lg border border-slate-200/90 text-xs">
+<span class="flex h-2.5 w-2.5 relative">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+</span>
+<span class="text-slate-400 font-semibold text-[11px] uppercase tracking-wider">GNSS Hub:</span>
+<span class="font-bold text-slate-900 font-km">រាជធានីភ្នំពេញ (Phnom Penh)</span>
+<span class="font-mono text-[10px] text-emerald-800 bg-emerald-50 font-bold border border-emerald-200 px-2 py-0.5 rounded-lg">11.5564° N, 104.9282° E</span>
+</div>
+</div>
+<!-- Right Top Map Tools, Controls & Live Mode Activator -->
+<div class="flex items-center gap-2 pointer-events-auto">
+<!-- Road Surface Legend Status -->
+<div class="hidden lg:flex items-center gap-3 bg-white/95 backdrop-blur-md px-3.5 py-2 rounded-2xl shadow-lg border border-slate-200/90 text-xs">
+<span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Passability:</span>
+<span class="flex items-center gap-1.5 text-slate-700 font-medium text-[11px]">
+<span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Optimal Paved
+      </span>
+<span class="flex items-center gap-1.5 text-slate-700 font-medium text-[11px]">
+<span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Caution / Works
+      </span>
+<span class="flex items-center gap-1.5 text-slate-700 font-medium text-[11px]">
+<span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> 4WD Laterite
+      </span>
+</div>
+<!-- Quick Live GPS Simulation Mode Toggle -->
+<button class="flex items-center gap-2 bg-white/95 backdrop-blur-md px-3.5 py-2 rounded-2xl shadow-lg border border-slate-200/90 text-xs font-bold text-slate-800 hover:border-emerald-500 hover:text-emerald-700 transition-all shadow-sm group" id="simVehicleToggleBtn" onclick="toggleNavSimulation()">
+<span class="material-symbols-outlined text-[19px] text-emerald-600 transition-transform group-hover:scale-110" id="simVehicleIcon">play_circle</span>
+<span class="" id="simVehicleLabel">Live GPS Sim</span>
+<span class="w-2 h-2 rounded-full bg-emerald-500 hidden animate-ping" id="simVehiclePing"></span>
+</button>
+<!-- Map Cartography Layer Switcher -->
+<div class="relative">
+<button class="flex items-center gap-1.5 bg-white/95 backdrop-blur-md px-3 py-2 rounded-2xl shadow-lg border border-slate-200/90 text-xs font-bold text-slate-800 hover:bg-slate-50 transition-all" id="layerSwitcherBtn" onclick="toggleLayerMenu()">
+<span class="material-symbols-outlined text-[18px] text-brand-800">layers</span>
+<span class="hidden sm:inline" id="activeLayerLabel">Esri World Topo</span>
+<span class="material-symbols-outlined text-[16px] text-slate-400">expand_more</span>
+</button>
+<!-- Layer Dropdown -->
+<div class="hidden absolute right-0 top-12 w-64 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-200/90 p-2.5 z-50 space-y-2" id="layerSwitcherDropdown">
+<div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider px-2 py-1 flex items-center justify-between">
+<span>Base Cartography</span>
+<span class="text-[10px] text-emerald-600 font-mono">Clean Unrestricted GIS</span>
+</div>
+<button class="w-full text-left p-2 rounded-xl text-xs font-semibold flex items-center justify-between border border-emerald-500 bg-emerald-50/70 text-emerald-950" id="layerOpt-topo-esri" onclick="selectMapTileLayer('topo-esri')">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-emerald-700">terrain</span>
+<div>
+<div class="font-bold">Esri World Topo</div>
+<div class="text-[10px] text-slate-500">Watermark-free crisp topography</div>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+</button>
+<button class="w-full text-left p-2 rounded-xl text-xs font-semibold flex items-center justify-between border border-slate-200 hover:bg-slate-50 text-slate-800" id="layerOpt-street-esri" onclick="selectMapTileLayer('street-esri')">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-emerald-700">alt_route</span>
+<div>
+<div class="font-bold">Esri World Street</div>
+<div class="text-[10px] text-slate-500">High-fidelity clean road network</div>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-slate-300"></span>
+</button>
+<button class="w-full text-left p-2 rounded-xl text-xs font-semibold flex items-center justify-between border border-slate-200 hover:bg-slate-50 text-slate-800" id="layerOpt-topo" onclick="selectMapTileLayer('topo')">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-emerald-700">landscape</span>
+<div>
+<div class="font-bold">OpenTopoMap</div>
+<div class="text-[10px] text-slate-500">Open source elevation contours</div>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-slate-300"></span>
+</button>
+<button class="w-full text-left p-2 rounded-xl text-xs font-semibold flex items-center justify-between border border-slate-200 hover:bg-slate-50 text-slate-800" id="layerOpt-satellite" onclick="selectMapTileLayer('satellite')">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-emerald-700">satellite_alt</span>
+<div>
+<div class="font-bold">World Satellite</div>
+<div class="text-[10px] text-slate-500">Esri high-res satellite imagery</div>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-slate-300"></span>
+</button>
+</div>
+</div>
+<!-- Bilingual Language Toggle -->
+<div class="flex items-center bg-white/95 backdrop-blur-md p-1 rounded-2xl shadow-lg border border-slate-200/90 text-xs font-bold">
+<button class="px-3 py-1 rounded-xl bg-primary text-white font-km transition-all" id="langBtnKm" onclick="switchLang('km')">ខ្មែរ</button>
+<button class="px-3 py-1 rounded-xl text-slate-600 hover:text-slate-900 transition-all" id="langBtnEn" onclick="switchLang('en')">EN</button>
+</div>
+<!-- Re-Center / Compass Bearing Button -->
+<button class="w-10 h-10 rounded-2xl bg-white/95 backdrop-blur-md shadow-lg border border-slate-200/90 text-slate-700 hover:text-emerald-800 hover:bg-slate-50 transition-all flex items-center justify-center group" onclick="recenterMap()" title="Re-center Cambodia Map &amp; Bearing">
+<span class="material-symbols-outlined text-[20px] transition-transform group-hover:rotate-45">near_me</span>
+</button>
+</div>
+</header>
+<!-- ================= 3. TOP PROVINCE SEARCH & FAST-PICK FILTER TABS ================= -->
+<div class="absolute top-20 left-4 right-4 z-20 pointer-events-none flex flex-col items-center">
+<div class="pointer-events-auto max-w-4xl w-full bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/90 p-2 flex flex-col sm:flex-row items-center gap-2">
+<!-- Search Input -->
+<div class="relative w-full sm:w-64 shrink-0">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+<input class="w-full pl-9 pr-3 py-2 bg-slate-100/90 focus:bg-white text-xs text-slate-800 placeholder-slate-400 rounded-xl border border-transparent focus:border-brand-600 focus:outline-none transition-all font-medium" id="provinceSearchInput" onkeyup="filterProvinces(this.value)" placeholder="Search province (សៀមរាប, កំពត...)" type="text"/>
+</div>
+<!-- Fast Province Filter Pill Bar -->
+<div class="w-full overflow-x-auto hide-scrollbar flex items-center gap-1.5 py-0.5" id="provincesQuickBar">
+<!-- Generated Dynamically -->
+</div>
+</div>
+</div>
+<!-- ================= 4. MAP ZOOM & VIEWPORT UTILITIES (RIGHT EDGE) ================= -->
+<div class="absolute right-4 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-2">
+<div class="bg-white/95 backdrop-blur-md rounded-2xl p-1.5 shadow-xl border border-slate-200/90 flex flex-col gap-1">
+<button class="w-9 h-9 flex items-center justify-center rounded-xl text-slate-700 hover:bg-slate-100 transition-colors" onclick="handleMapZoom(1)" title="Zoom In (+)">
+<span class="material-symbols-outlined text-[20px]">add</span>
+</button>
+<button class="w-9 h-9 flex items-center justify-center rounded-xl text-slate-700 hover:bg-slate-100 transition-colors" onclick="handleMapZoom(-1)" title="Zoom Out (-)">
+<span class="material-symbols-outlined text-[20px]">remove</span>
+</button>
+<div class="h-px bg-slate-200 mx-1.5 my-0.5"></div>
+<button class="w-9 h-9 flex items-center justify-center rounded-xl text-emerald-700 hover:bg-emerald-50 transition-colors" onclick="recenterMap()" title="Fit Route Extents">
+<span class="material-symbols-outlined text-[20px]">alt_route</span>
+</button>
+</div>
+</div>
+<!-- ================= 5. FLOATING TRIP PLACES CAROUSEL (STEP 2: DESTINATIONS) ================= -->
+<div class="absolute bottom-[220px] left-4 right-4 md:right-auto md:max-w-2xl z-20 pointer-events-none transition-all duration-300" id="placesDrawer">
+<div class="pointer-events-auto bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-200/90 p-3 space-y-2">
+<!-- Province Header -->
+<div class="flex items-center justify-between border-b border-slate-100 pb-2">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+<h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+<span id="placesDrawerTitle">Siem Reap</span>
+<span class="text-xs font-semibold text-brand-900 bg-brand-100 px-2 py-0.5 rounded-md font-km" id="placesDrawerKm">ខេត្តសៀមរាប</span>
+</h3>
+<span class="text-[11px] text-slate-400 font-mono" id="placesDrawerPlacesCount">3 Places</span>
+</div>
+<span class="text-[11px] text-slate-500 font-medium hidden sm:inline">Select destination to recalculate route conditions:</span>
+</div>
+<!-- Horizontal Destination Cards Carousel -->
+<div class="flex items-center gap-3 overflow-x-auto hide-scrollbar pb-1 pt-1" id="placesCardsContainer">
+<!-- Populated dynamically -->
+</div>
+</div>
+</div>
+<!-- ================= 6. ACTIVE REAL-TIME TURN-BY-TURN NAVIGATION HUD OVERLAY ================= -->
+<div class="hidden absolute top-20 left-4 right-4 max-w-xl z-40 pointer-events-auto transition-all duration-500" id="liveTurnByTurnCockpit">
+<div class="bg-slate-950/95 backdrop-blur-xl text-white rounded-2xl shadow-2xl border border-slate-700/80 p-3.5 space-y-3">
+<!-- Next Maneuver Banner -->
+<div class="flex items-start justify-between gap-3">
+<div class="flex items-center gap-3">
+<div class="w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-lg" id="hudManeuverIconBox">
+<span class="material-symbols-outlined text-[28px]" id="hudManeuverIcon">straight</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="text-emerald-400 text-xs font-mono font-bold tracking-wide uppercase" id="hudManeuverDist">In 1.2 km</span>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 font-mono" id="hudManeuverHwy">NR6</span>
+</div>
+<h2 class="text-sm sm:text-base font-bold text-white leading-tight" id="hudManeuverPrimaryText">
+            Continue straight on NR6 through Skun Interchange
+          </h2>
+<p class="text-xs text-slate-400 font-km leading-tight mt-0.5" id="hudManeuverKhmerText">
+            បន្តដំណើរត្រង់តាមផ្លូវជាតិលេខ ៦ កាត់តាមរង្វង់មូលស្គន់
+          </p>
+</div>
+</div>
+<!-- Simulation Speed Multiplier Controls (1x, 5x, 10x) -->
+<div class="flex items-center gap-1 shrink-0 bg-slate-900 border border-slate-700/60 p-1 rounded-xl">
+<button class="px-2 py-0.5 text-[10px] font-bold rounded-lg bg-emerald-700 text-white" id="spd1xBtn" onclick="setSimSpeed(1)">1x</button>
+<button class="px-2 py-0.5 text-[10px] font-bold rounded-lg text-slate-400 hover:text-white" id="spd5xBtn" onclick="setSimSpeed(5)">5x</button>
+<button class="px-2 py-0.5 text-[10px] font-bold rounded-lg text-slate-400 hover:text-white" id="spd10xBtn" onclick="setSimSpeed(10)">10x</button>
+</div>
+</div>
+<!-- Real-Time Dynamic Telemetry Strip: Speedometer, Odometer, ETA Clock & Surface Passability -->
+<div class="grid grid-cols-4 gap-2 bg-slate-900/90 rounded-xl p-2.5 border border-slate-800/80 text-center">
+<div class="border-r border-slate-800 pr-1">
+<div class="text-[9px] uppercase font-bold text-slate-400">Current Speed</div>
+<div class="text-base sm:text-lg font-bold font-mono text-emerald-400" id="hudSpeedVal">74 <span class="text-[10px] text-slate-400 font-normal">km/h</span></div>
+<div class="text-[9px] text-slate-400" id="hudSpeedLimit">Limit: 90</div>
+</div>
+<div class="border-r border-slate-800 pr-1">
+<div class="text-[9px] uppercase font-bold text-slate-400">Remaining</div>
+<div class="text-base sm:text-lg font-bold font-mono text-white" id="hudRemainDist">284 <span class="text-[10px] text-slate-400 font-normal">km</span></div>
+<div class="text-[9px] text-slate-400" id="hudDistancePct">10% Traveled</div>
+</div>
+<div class="border-r border-slate-800 pr-1">
+<div class="text-[9px] uppercase font-bold text-slate-400">Live ETA</div>
+<div class="text-base sm:text-lg font-bold font-mono text-white" id="hudEtaClock">4h 12m</div>
+<div class="text-[9px] text-emerald-400" id="hudEtaTarget">Arr: 16:45</div>
+</div>
+<div>
+<div class="text-[9px] uppercase font-bold text-slate-400">Surface Sector</div>
+<div class="text-xs sm:text-sm font-bold text-emerald-400 truncate" id="hudSurfaceSector">Smooth Asphalt</div>
+<div class="text-[9px] text-slate-400 font-km truncate" id="hudSurfaceSub">កៅស៊ូល្អរលូន</div>
+</div>
+</div>
+<!-- Navigation Control Actions: Pause / Resume / Cancel -->
+<div class="flex items-center justify-between text-xs pt-1">
+<div class="flex items-center gap-2">
+<button class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center gap-1.5 transition-all" id="hudPauseBtn" onclick="toggleNavPause()">
+<span class="material-symbols-outlined text-[16px]" id="hudPauseIcon">pause</span>
+<span id="hudPauseLabel">Pause</span>
+</button>
+<button class="px-3 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-200 font-bold flex items-center gap-1 transition-all" onclick="stopNavigationMode()">
+<span class="material-symbols-outlined text-[16px]">close</span>
+<span>Exit Navigation (បញ្ចប់)</span>
+</button>
+</div>
+<div class="flex items-center gap-1.5 text-[11px] font-mono text-slate-400">
+<span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+<span>GNSS Satellite Locked</span>
+</div>
+</div>
+</div>
+</div>
+<!-- ================= 7. TELEMETRY & EXPEDITION DOCKED SHEET ================= -->
+<div class="absolute bottom-4 left-4 right-4 z-20 pointer-events-none">
+<div class="pointer-events-auto max-w-6xl mx-auto bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-200/95 p-3.5 sm:p-4 transition-all">
+<div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+<!-- Left: Route Destination & Passability Index -->
+<div class="flex items-start sm:items-center gap-3 min-w-[280px]">
+<div class="w-11 h-11 rounded-2xl bg-primary text-emerald-400 flex items-center justify-center shrink-0 shadow-md">
+<span class="material-symbols-outlined text-[24px]">navigation</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 font-mono">NATIONAL CORRIDOR</span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[11px] font-bold" id="telemetryPassBadge">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+<span id="telemetryPassIndex">Passability: 89% Optimal</span>
+</span>
+</div>
+<h2 class="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
+<span>Phnom Penh</span>
+<span class="text-slate-400">➔</span>
+<span class="text-primary font-extrabold" id="telemetryPlaceTitle">Angkor Wat Sanctuary</span>
+<span class="text-xs font-normal text-slate-500 font-km" id="telemetryPlaceKm">(ខេត្តសៀមរាប)</span>
+</h2>
+</div>
+</div>
+<!-- Center: Key Metrics Strip -->
+<div class="grid grid-cols-4 gap-2 bg-slate-50/90 rounded-xl px-3 py-2 border border-slate-200/80 text-center shrink-0">
+<div>
+<div class="text-[9px] uppercase font-bold text-slate-400">Distance</div>
+<div class="text-xs sm:text-sm font-bold text-slate-900 font-mono" id="telemetryDistance">314 <span class="text-[10px] text-slate-500 font-normal">km</span></div>
+</div>
+<div>
+<div class="text-[9px] uppercase font-bold text-slate-400">ETA Time</div>
+<div class="text-xs sm:text-sm font-bold text-slate-900 font-mono" id="telemetryDuration">4h 45m</div>
+</div>
+<div>
+<div class="text-[9px] uppercase font-bold text-slate-400">Elevation</div>
+<div class="text-xs sm:text-sm font-bold text-emerald-700 font-mono" id="telemetryElev">+53 m</div>
+</div>
+<div>
+<div class="text-[9px] uppercase font-bold text-slate-400">Corridor</div>
+<div class="text-xs sm:text-sm font-bold text-slate-900" id="telemetryHighway">NR6 Paved</div>
+</div>
+</div>
+<!-- Center-Right: Road Quality Distribution Bar -->
+<div class="flex-1 min-w-[240px] space-y-1">
+<div class="flex items-center justify-between text-[11px]">
+<span class="font-bold text-slate-700 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-emerald-700">linear_scale</span>
+            Road Surface Breakdown (Good to Bad)
+          </span>
+<span class="text-slate-500 font-mono text-[10px]" id="telemetryTotalKm">314 km Total</span>
+</div>
+<div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
+<div class="bg-emerald-500 h-full transition-all duration-500" id="telemetryBarGood" style="width: 78%;" title="Paved"></div>
+<div class="bg-amber-500 h-full transition-all duration-500" id="telemetryBarCaution" style="width: 16%;" title="Caution/Work"></div>
+<div class="bg-rose-500 h-full transition-all duration-500" id="telemetryBarBad" style="width: 6%;" title="4WD Rough"></div>
+</div>
+<div class="flex items-center justify-between text-[10px] text-slate-600">
+<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> <span id="barLblGood">78% Paved</span></span>
+<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> <span id="barLblCaution">16% Bypass</span></span>
+<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> <span id="barLblBad">6% Rough</span></span>
+</div>
+</div>
+<!-- Right: Primary Action Start Navigation CTA -->
+<div class="flex items-center gap-2 shrink-0">
+<button class="w-full sm:w-auto px-5 py-3 rounded-xl text-xs font-bold bg-primary text-white hover:bg-black transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl group" id="startRouteCtaBtn" onclick="startNavigationMode()">
+<span class="material-symbols-outlined text-[20px] text-emerald-400 group-hover:animate-bounce">directions_car</span>
+<span class="text-sm">Start Route</span>
+<span class="text-xs font-km font-normal opacity-90">(ចាប់ផ្តើម)</span>
+</button>
+</div>
+</div>
+<!-- Real-Time Advisory Banner -->
+<div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
+<div class="flex items-center gap-2 truncate">
+<span class="material-symbols-outlined text-amber-600 text-sm shrink-0">info</span>
+<span class="font-bold text-slate-800 text-[11px] shrink-0">Live Advisory:</span>
+<span class="font-km text-[11px] text-slate-600 truncate" id="telemetryAdvisoryText">ផ្លូវជាតិលេខ ៦ អាចធ្វើដំណើរបានគ្រប់ប្រភេទយានយន្ត។ ប្រុងប្រយ័ត្នការដ្ឋានជួសជុលចន្លោះ គ.ម ១៤០-១៦៥។</span>
+</div>
+<div class="hidden md:flex items-center gap-2 font-mono text-[10px] text-slate-400 shrink-0">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+<span>Esri World Topo GIS Feed · Sat GNSS Fixed (104.92°E, 11.55°N)</span>
+</div>
+</div>
+</div>
+</div>
+<!-- ================= 8. ADVANCED LEAFLET & GIS ENGINE JAVASCRIPT ================= -->
+<script>
+    // 1. ALL 25 PROVINCES GEO-REFERENCED DATASET WITH REAL GPS LAT/LNG
+    const CAMBODIA_PROVINCES = [
+      { id: 'siem_reap', nameEn: 'Siem Reap', nameKm: 'ខេត្តសៀមរាប', region: 'Central/Lake', tripsCount: 5, highway: 'NR6 Asphalt', distanceKm: 314, lat: 13.3671, lng: 103.8448, statusColor: 'emerald', statusText: 'Optimal Paved', desc: 'Angkor Wat & Tonle Sap floating villages' },
+      { id: 'phnom_penh', nameEn: 'Phnom Penh', nameKm: 'រាជធានីភ្នំពេញ', region: 'Central Hub', tripsCount: 4, highway: 'National Hub (NR1-6)', distanceKm: 0, lat: 11.5564, lng: 104.9282, statusColor: 'emerald', statusText: 'Urban Highway Hub', desc: 'Capital city & Chaktomuk confluence hub' },
+      { id: 'battambang', nameEn: 'Battambang', nameKm: 'ខេត្តបាត់ដំបង', region: 'Northwest', tripsCount: 3, highway: 'NR5 4-Lane Paved', distanceKm: 292, lat: 13.0957, lng: 103.2022, statusColor: 'emerald', statusText: 'Optimal 4-Lane', desc: 'Phnom Sampeau & colonial heritage' },
+      { id: 'kampot', nameEn: 'Kampot', nameKm: 'ខេត្តកំពត', region: 'Coastal', tripsCount: 3, highway: 'NR3 & Bokor Pass', distanceKm: 148, lat: 10.6104, lng: 104.1815, statusColor: 'amber', statusText: 'Mountain Curves', desc: 'Bokor National Park & coastal pepper' },
+      { id: 'mondulkiri', nameEn: 'Mondulkiri', nameKm: 'ខេត្តមណ្ឌលគិរី', region: 'Highlands', tripsCount: 3, highway: 'NR76 Scenic Pass', distanceKm: 375, lat: 12.4558, lng: 107.1881, statusColor: 'rose', statusText: '4WD Laterite Track', desc: 'Bousra Waterfall & rolling pine hills' },
+      { id: 'preah_vihear', nameEn: 'Preah Vihear', nameKm: 'ខេត្តព្រះវិហារ', region: 'Northwest', tripsCount: 2, highway: 'NR62 Mountain Cliff', distanceKm: 415, lat: 13.8073, lng: 104.9811, statusColor: 'amber', statusText: 'Steep Cliff Pass', desc: 'Prasat Preah Vihear on Dângrêk cliff' },
+      { id: 'koh_kong', nameEn: 'Koh Kong', nameKm: 'ខេត្តកោះកុង', region: 'Coastal', tripsCount: 2, highway: 'NR48 Coastal Pass', distanceKm: 275, lat: 11.6153, lng: 102.9838, statusColor: 'amber', statusText: 'Coastal Rainforest', desc: 'Cardamom rainforests & Tatai rapids' },
+      { id: 'preah_sihanouk', nameEn: 'Preah Sihanouk', nameKm: 'ខេត្តព្រះសីហនុ', region: 'Coastal', tripsCount: 3, highway: 'E4 Expressway (120 km/h)', distanceKm: 190, lat: 10.6253, lng: 103.5234, statusColor: 'emerald', statusText: 'Expressway', desc: 'Deep seaport, beaches & Koh Rong' },
+      { id: 'kep', nameEn: 'Kep', nameKm: 'ខេត្តកែប', region: 'Coastal', tripsCount: 2, highway: 'NR33 Smooth Coastal', distanceKm: 165, lat: 10.4828, lng: 104.3167, statusColor: 'emerald', statusText: 'Optimal Coastal', desc: 'Crab market & Kep National Park' },
+      { id: 'ratanakiri', nameEn: 'Ratanakiri', nameKm: 'ខេត្តរតនគិរី', region: 'Highlands', tripsCount: 2, highway: 'NR78 Mountain Corridor', distanceKm: 588, lat: 13.7350, lng: 106.9873, statusColor: 'rose', statusText: 'Remote Highland', desc: 'Yeak Laom volcanic lake & red trails' },
+      { id: 'kratie', nameEn: 'Kratie', nameKm: 'ខេត្តក្រចេះ', region: 'Highlands', tripsCount: 2, highway: 'NR7 River Highway', distanceKm: 340, lat: 12.4881, lng: 106.0188, statusColor: 'emerald', statusText: 'Optimal River Route', desc: 'Irrawaddy freshwater dolphins at Kampi' },
+      { id: 'stung_treng', nameEn: 'Stung Treng', nameKm: 'ខេត្តស្ទឹងត្រែង', region: 'Highlands', tripsCount: 2, highway: 'NR7 to Lao Border', distanceKm: 455, lat: 13.5259, lng: 105.9683, statusColor: 'amber', statusText: 'River Confluence', desc: 'Ramsar wetlands on Sekong & Mekong' },
+      { id: 'pursat', nameEn: 'Pursat', nameKm: 'ខេត្តពោធិ៍សាត់', region: 'Northwest', tripsCount: 2, highway: 'NR5 & Cardamom Pass', distanceKm: 185, lat: 12.5388, lng: 103.9192, statusColor: 'amber', statusText: 'Pass Roadworks', desc: 'Kompong Luong floating town & 1500 Pass' },
+      { id: 'kampong_thom', nameEn: 'Kampong Thom', nameKm: 'ខេត្តកំពង់ធំ', region: 'Central/Lake', tripsCount: 2, highway: 'NR6 Sector', distanceKm: 165, lat: 12.7111, lng: 104.8887, statusColor: 'amber', statusText: 'Work Zone KM140', desc: 'Sambor Prei Kuk pre-Angkorian temples' },
+      { id: 'kampong_cham', nameEn: 'Kampong Cham', nameKm: 'ខេត្តកំពង់ចាម', region: 'Central/Lake', tripsCount: 2, highway: 'NR7 Wide Paved', distanceKm: 124, lat: 11.9924, lng: 105.4645, statusColor: 'emerald', statusText: 'Optimal Paved', desc: 'Koh Pen bamboo bridge & Mekong banks' },
+      { id: 'kampong_speu', nameEn: 'Kampong Speu', nameKm: 'ខេត្តកំពង់ស្ពឺ', region: 'Central/Lake', tripsCount: 2, highway: 'NR4 & Kirirom Pass', distanceKm: 85, lat: 11.4533, lng: 104.5209, statusColor: 'amber', statusText: 'Pine Hill Ascent', desc: 'Kirirom pine plateaus & Mount Aural' },
+      { id: 'kampong_chhnang', nameEn: 'Kampong Chhnang', nameKm: 'ខេត្តកំពង់ឆ្នាំង', region: 'Central/Lake', tripsCount: 2, highway: 'NR5 Dual-lane', distanceKm: 91, lat: 12.2500, lng: 104.6667, statusColor: 'emerald', statusText: 'Expanded NR5 Paved', desc: 'Pottery villages & Tonle Sap river mouth' },
+      { id: 'takeo', nameEn: 'Takeo', nameKm: 'ខេត្តតាកែវ', region: 'Central/Lake', tripsCount: 2, highway: 'NR2 / NR3', distanceKm: 78, lat: 10.9908, lng: 104.7850, statusColor: 'emerald', statusText: 'Optimal Paved', desc: 'Phnom Da ancient Funan heritage' },
+      { id: 'kandal', nameEn: 'Kandal', nameKm: 'ខេត្តកណ្តាល', region: 'Central/Lake', tripsCount: 2, highway: 'NR1/NR2 Belt', distanceKm: 25, lat: 11.4392, lng: 105.0000, statusColor: 'emerald', statusText: 'Urban Beltway', desc: 'Oudong Mountain royal stupas' },
+      { id: 'banteay_meanchey', nameEn: 'Banteay Meanchey', nameKm: 'ខេត្តបន្ទាយមានជ័យ', region: 'Northwest', tripsCount: 2, highway: 'NR5 & NR6 Junction', distanceKm: 360, lat: 13.5859, lng: 102.9737, statusColor: 'emerald', statusText: 'Optimal Highway', desc: 'Banteay Chhmar temple fortress' },
+      { id: 'oddar_meanchey', nameEn: 'Oddar Meanchey', nameKm: 'ខេត្តឧត្តរមានជ័យ', region: 'Northwest', tripsCount: 2, highway: 'NR68 Border Highway', distanceKm: 430, lat: 14.1818, lng: 103.5176, statusColor: 'amber', statusText: 'Border Incline', desc: 'Dângrêk border passes' },
+      { id: 'prey_veng', nameEn: 'Prey Veng', nameKm: 'ខេត្តព្រៃវែង', region: 'Central/Lake', tripsCount: 2, highway: 'NR11 & Tsubasa Bridge', distanceKm: 90, lat: 11.4868, lng: 105.3253, statusColor: 'emerald', statusText: 'Optimal Paved', desc: 'Mekong floodplains & Ba Phnom' },
+      { id: 'svay_rieng', nameEn: 'Svay Rieng', nameKm: 'ខេត្តស្វាយរៀង', region: 'Central/Lake', tripsCount: 2, highway: 'NR1 Asian Highway', distanceKm: 122, lat: 11.0879, lng: 105.7993, statusColor: 'emerald', statusText: 'Optimal Highway', desc: 'Bavet international border corridor' },
+      { id: 'tboung_khmum', nameEn: 'Tboung Khmum', nameKm: 'ខេត្តត្បូងឃ្មុំ', region: 'Central/Lake', tripsCount: 2, highway: 'NR7 / NR72', distanceKm: 155, lat: 11.9167, lng: 105.6667, statusColor: 'emerald', statusText: 'Optimal Paved', desc: 'Red soil rubber plantations & Memot' },
+      { id: 'pailin', nameEn: 'Pailin', nameKm: 'ខេត្តប៉ៃលិន', region: 'Northwest', tripsCount: 2, highway: 'NR57 Foothills', distanceKm: 370, lat: 12.8489, lng: 102.6093, statusColor: 'amber', statusText: 'Hilly Curves', desc: 'Wat Phnom Yat & gem hills' }
+    ];
+
+    // 2. DETAILED GPS WAYPOINTS FOR ACCURATE CAMBODIA CORRIDORS
+    // Real NR6 Highway GPS points from Phnom Penh to Siem Reap
+    const NR6_WAYPOINTS_OPTIMAL_1 = [
+      [11.5564, 104.9282], // Phnom Penh Monivong / Chaktomuk
+      [11.5910, 104.9180], // Chroy Changvar Bridge
+      [11.6620, 104.9350], // Prek Pnov
+      [11.8340, 104.9820], // Batheay
+      [12.0520, 105.0110], // Skun Interchange (Junction with NR7)
+      [12.2850, 104.9560], // Cheung Prey
+      [12.5120, 104.9080]  // Approaching Kampong Thom boundary
+    ];
+
+    const NR6_WAYPOINTS_CAUTION = [
+      [12.5120, 104.9080],
+      [12.6350, 104.8940], // Tang Krasang
+      [12.7111, 104.8887], // Kampong Thom Provincial Town
+      [12.7950, 104.8210], // KM 165 Roadwork Rehabilitation Zone
+      [12.9200, 104.6850], // Stoung Sector
+      [13.0150, 104.5200]  // Chi Kraeng border
+    ];
+
+    const NR6_WAYPOINTS_OPTIMAL_2 = [
+      [13.0150, 104.5200],
+      [13.1200, 104.3400], // Damdek Junction
+      [13.2500, 104.0500], // Prasat Bakong
+      [13.3671, 103.8448], // Siem Reap Center Hub
+      [13.4125, 103.8670]  // Angkor Wat Sanctuary Grand Entrance
+    ];
+
+    // 3. DESTINATIONS DATA ENRICHED WITH REAL GPS COORDINATES
+    const DESTINATIONS_DATA = {
+      siem_reap: [
+        {
+          id: 'sr_angkor',
+          title: 'Angkor Wat Sanctuary',
+          khmer: 'ប្រាសាទអង្គរវត្ត និងភ្នំបាខែង',
+          tag: 'UNESCO Heritage',
+          image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAnx-ocuBQ58zgnpIrwq65zCnpBc--y8L8KLLXRoEPZOrDzbJI3PCuDuL_fbvQFvWs9FJseQvcvbGRmJPyKnhd-_nVXZ7KDnP9feasfNFtAL9j1Y7eSpKpz-HUJ5vqRf_SNwBPaaM5Zek3M1pj4xl-3EWpZCzmJd3iRWhqFoaHLXkKeB9xie0jbmqwsRzDYg_Ds-egLGY8gkf2RUptQYhtUwP0X8sleIroj7iHXVY8',
+          elevation: '65m',
+          distance: '314 km',
+          duration: '4h 45m',
+          elevDelta: '+53 m',
+          highway: 'NR6 Asphalt',
+          conditionBadge: 'Optimal · NR6 Asphalt',
+          passIndex: '89%',
+          passLabel: 'Optimal',
+          goodPct: 78,
+          cautionPct: 16,
+          badPct: 6,
+          targetLat: 13.4125,
+          targetLng: 103.8670,
+          advisory: 'ផ្លូវជាតិលេខ ៦ អាចធ្វើដំណើរបានគ្រប់ប្រភេទយានយន្ត។ ប្រុងប្រយ័ត្នការដ្ឋានជួសជុលចន្លោះ គ.ម ១៤០-១៦៥។',
+          midpointCoords: [12.7950, 104.8210],
+          midpointText: 'KM 165 Kampong Thom Roadworks',
+          corridorSegments: [
+            { points: NR6_WAYPOINTS_OPTIMAL_1, type: 'optimal', color: '#059669' },
+            { points: NR6_WAYPOINTS_CAUTION, type: 'caution', color: '#d97706' },
+            { points: NR6_WAYPOINTS_OPTIMAL_2, type: 'optimal', color: '#059669' }
+          ],
+          maneuvers: [
+            { dist: 'In 1.2 km', hwy: 'NR6', en: 'Continue straight on NR6 through Skun Interchange', km: 'បន្តដំណើរត្រង់តាមផ្លូវជាតិលេខ ៦ កាត់តាមរង្វង់មូលស្គន់', icon: 'straight', speed: 82, limit: 90, sector: 'Optimal NR6 Asphalt', sectorKm: 'កៅស៊ូល្អរលូន' },
+            { dist: 'In 45 km', hwy: 'NR6', en: 'Slow to 35 km/h at Kampong Thom KM 165 roadworks', km: 'បន្ថយល្បឿនមកត្រឹម ៣៥ គ.ម/ម៉ នៅការដ្ឋានជួសជុល គ.ម ១៦៥', icon: 'construction', speed: 38, limit: 40, sector: 'Caution Repair Sector', sectorKm: 'ការដ្ឋានផ្លូវ កំណាត់ជួសជុល' },
+            { dist: 'In 180 km', hwy: 'NR6', en: 'Continue on 4-lane avenue approaching Siem Reap Royal Gardens', km: 'បន្តតាមមហាវិថី ៤ គន្លង ឆ្ពោះទៅសួនព្រះរាជដំណាក់សៀមរាប', icon: 'turn_slight_right', speed: 65, limit: 80, sector: 'Optimal Boulevard', sectorKm: 'ផ្លូវស្អាតទូលាយ' }
+          ]
+        },
+        {
+          id: 'sr_kulen',
+          title: 'Phnom Kulen Holy Waterfall',
+          khmer: 'ឧទ្យានជាតិភ្នំគូលែន',
+          tag: 'Mountain Plateau',
+          image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAz_FkNTctR0M4N49mCdDH350YouDtPyu59b12eTGxveTIcFsM42joNTCBxHpSANBTxsvWJXmCdpXPHuwuOD3u9XuMc34SE3oE09QHOMcCXIQXPoTBZDgG-W--NE77cPy5ZuznWll20MPGsNmXTVcvTEHJrPj7l4tPPiP8B2AgFBUKoyzHA8HGAG8Vfcfr8YSxS_Px5BLrMOXQDvJYMKeQDTKSYUBOCpzeUWg0jkI8',
+          elevation: '487m',
+          distance: '358 km',
+          duration: '5h 30m',
+          elevDelta: '+475 m',
+          highway: 'NR6 + Kulen Sky Pass',
+          conditionBadge: 'Caution · Steep 1-Way Pass',
+          passIndex: '72%',
+          passLabel: 'Caution Pass',
+          goodPct: 62,
+          cautionPct: 28,
+          badPct: 10,
+          targetLat: 13.5645,
+          targetLng: 104.1030,
+          advisory: 'ភ្នំគូលែនអនុញ្ញាតឲ្យរថយន្តឡើងត្រឹមម៉ោង ១១:០០ ព្រឹក និងចុះចាប់ពីម៉ោង ១២:៣០ ថ្ងៃត្រង់។ ផ្លូវជម្រាលភ្នំត្រូវការអ្នកបើកបរប៉ិនប្រសប់។',
+          midpointCoords: [13.4500, 104.0500],
+          midpointText: 'Kulen Foothills One-Way Gate',
+          corridorSegments: [
+            { points: NR6_WAYPOINTS_OPTIMAL_1, type: 'optimal', color: '#059669' },
+            { points: [
+                [12.5120, 104.9080],
+                [12.7111, 104.8887],
+                [13.1200, 104.3400]
+              ], type: 'optimal', color: '#059669' },
+            { points: [
+                [13.1200, 104.3400],
+                [13.3500, 104.1800],
+                [13.5645, 104.1030]
+              ], type: 'caution', color: '#d97706' }
+          ],
+          maneuvers: [
+            { dist: 'In 2.5 km', hwy: 'NR6', en: 'Take exit right onto Kulen Mountain Scenic Pass', km: 'បត់ស្តាំឡើងផ្លូវចំណោតភ្នំគូលែន', icon: 'turn_right', speed: 40, limit: 50, sector: 'Mountain Winding Incline', sectorKm: 'ផ្លូវចំណោតភ្នំ ត្រូវការប្រុងប្រយ័ត្ន' }
+          ]
+        },
+        {
+          id: 'sr_tonlesap',
+          title: 'Tonle Sap Chong Kneas',
+          khmer: 'ភូមិបណ្តែតទឹកចុងឃ្នាស',
+          tag: 'Biosphere Reserve',
+          image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBB4zSIZNLbwRtEd_lKf9DnjSmpoVFOyKW5iNKn2ZnFFomi6rSTCUQ370iF7WEoVCLfz4Dak0gXtTJvtkrNrpKqLnb22VBvBGCdDHt_AC-0anAgJgijgEpQIeSi9bKILURXD3ASSE_GAeQ6u4fyP59uhiCmiDJc_paC4EtJwQ-aZsNxaL8uNwyuV-VSoYQXBFPt_PmKhpKDbg0nqqepfCmUjydywchiQAprHwAS8jA',
+          elevation: '12m',
+          distance: '329 km',
+          duration: '5h 10m',
+          elevDelta: '+2 m',
+          highway: 'NR6 + Port Access',
+          conditionBadge: 'Optimal · Flat Access',
+          passIndex: '85%',
+          passLabel: 'Optimal',
+          goodPct: 82,
+          cautionPct: 12,
+          badPct: 6,
+          targetLat: 13.2420,
+          targetLng: 103.8200,
+          advisory: 'ផ្លូវឆ្ពោះទៅកំពង់ផែទូកធម្មតា។ រដូវប្រាំងទឹកបឹងស្រក ត្រូវដើរលើស្ពានឈើខ្លះៗ។',
+          midpointCoords: [13.2900, 103.8300],
+          midpointText: 'Chong Kneas Pier Access Turn',
+          corridorSegments: [
+            { points: NR6_WAYPOINTS_OPTIMAL_1, type: 'optimal', color: '#059669' },
+            { points: NR6_WAYPOINTS_CAUTION, type: 'caution', color: '#d97706' },
+            { points: [
+                [13.0150, 104.5200],
+                [13.3671, 103.8448],
+                [13.2420, 103.8200]
+              ], type: 'optimal', color: '#059669' }
+          ],
+          maneuvers: [
+            { dist: 'In 3.8 km', hwy: 'NR63', en: 'Turn left to Chong Kneas Floating Village Terminal', km: 'បត់ឆ្វេងឆ្ពោះទៅកំពង់ផែទេសចរណ៍ភូមិបណ្តែតទឹក', icon: 'turn_left', speed: 50, limit: 60, sector: 'Port Access Road', sectorKm: 'ផ្លូវកំពង់ផែបឹង' }
+          ]
+        }
+      ],
+      battambang: [
+        {
+          id: 'bb_sampeau',
+          title: 'Phnom Sampeau Bat Caves',
+          khmer: 'ភ្នំសំពៅ និងល្អាងប្រចៀវ',
+          tag: 'Natural Wonder',
+          image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAnx-ocuBQ58zgnpIrwq65zCnpBc--y8L8KLLXRoEPZOrDzbJI3PCuDuL_fbvQFvWs9FJseQvcvbGRmJPyKnhd-_nVXZ7KDnP9feasfNFtAL9j1Y7eSpKpz-HUJ5vqRf_SNwBPaaM5Zek3M1pj4xl-3EWpZCzmJd3iRWhqFoaHLXkKeB9xie0jbmqwsRzDYg_Ds-egLGY8gkf2RUptQYhtUwP0X8sleIroj7iHXVY8',
+          elevation: '100m',
+          distance: '292 km',
+          duration: '4h 15m',
+          elevDelta: '+85 m',
+          highway: 'NR5 4-Lane Paved',
+          conditionBadge: 'Optimal · 4-Lane Highway',
+          passIndex: '94%',
+          passLabel: 'Optimal',
+          goodPct: 92,
+          cautionPct: 7,
+          badPct: 1,
+          targetLat: 13.0250,
+          targetLng: 103.1020,
+          advisory: 'ផ្លូវជាតិលេខ ៥ ពង្រីក ៤ គន្លងរួចរាល់យ៉ាងស្រស់ស្អាត ធ្វើដំណើរបានលឿន និងមានសុវត្ថិភាពខ្ពស់។',
+          midpointCoords: [12.5388, 103.9192],
+          midpointText: 'Pursat 4-Lane Rest Area',
+          corridorSegments: [
+            { points: [
+                [11.5564, 104.9282],
+                [11.8340, 104.7500],
+                [12.2500, 104.6667], // Kampong Chhnang
+                [12.5388, 103.9192], // Pursat
+                [13.0957, 103.2022], // Battambang
+                [13.0250, 103.1020]
+              ], type: 'optimal', color: '#059669' }
+          ],
+          maneuvers: [
+            { dist: 'In 2.1 km', hwy: 'NR5', en: 'Continue on NR5 4-Lane Expressway grade toward Battambang', km: 'បន្តដំណើរតាមផ្លូវជាតិលេខ ៥ ពង្រីក ៤ គន្លង', icon: 'straight', speed: 85, limit: 90, sector: 'Optimal 4-Lane Highway', sectorKm: 'ផ្លូវជាតិ ៤ គន្លងថ្មី' }
+          ]
+        }
+      ],
+      kampot: [
+        {
+          id: 'kp_bokor',
+          title: 'Phnom Bokor National Park',
+          khmer: 'ឧទ្យានជាតិភ្នំបូកគោ',
+          tag: 'Mountain Plateau',
+          image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAz_FkNTctR0M4N49mCdDH350YouDtPyu59b12eTGxveTIcFsM42joNTCBxHpSANBTxsvWJXmCdpXPHuwuOD3u9XuMc34SE3oE09QHOMcCXIQXPoTBZDgG-W--NE77cPy5ZuznWll20MPGsNmXTVcvTEHJrPj7l4tPPiP8B2AgFBUKoyzHA8HGAG8Vfcfr8YSxS_Px5BLrMOXQDvJYMKeQDTKSYUBOCpzeUWg0jkI8',
+          elevation: '1,075m',
+          distance: '188 km',
+          duration: '3h 30m',
+          elevDelta: '+1,065 m',
+          highway: 'NR3 + Bokor Sky Pass',
+          conditionBadge: 'Caution · 32km Winding Pass',
+          passIndex: '78%',
+          passLabel: 'Caution Pass',
+          goodPct: 85,
+          cautionPct: 15,
+          badPct: 0,
+          targetLat: 10.6300,
+          targetLng: 104.0200,
+          advisory: 'ផ្លូវឡើងភ្នំបូកគោកៅស៊ូស្អាត ប៉ុន្តែមានអ័ព្ទក្រាស់នៅពេលល្ងាច។ ត្រូវបើកភ្លើងអ័ព្ទ និងបន្ថយល្បឿននៅចំណោតកោង ៣២ គ.ម។',
+          midpointCoords: [10.6104, 104.1815],
+          midpointText: 'Bokor Mountain Ascent Checkpoint',
+          corridorSegments: [
+            { points: [
+                [11.5564, 104.9282],
+                [11.2000, 104.8000],
+                [10.9908, 104.7850],
+                [10.6104, 104.1815]
+              ], type: 'optimal', color: '#059669' },
+            { points: [
+                [10.6104, 104.1815],
+                [10.6200, 104.1000],
+                [10.6300, 104.0200]
+              ], type: 'caution', color: '#d97706' }
+          ],
+          maneuvers: [
+            { dist: 'In 1.5 km', hwy: 'Bokor Pass', en: 'Turn right at Bokor Gate into 32 km winding mountain ascent', km: 'បត់ស្តាំចូលក្លោងទ្វារភ្នំបូកគោ ឡើងចំណោត ៣២ គីឡូម៉ែត្រ', icon: 'turn_slight_right', speed: 45, limit: 50, sector: 'Winding Mountain Pass', sectorKm: 'ផ្លូវកោងចំណោតភ្នំ' }
+          ]
+        }
+      ],
+      mondulkiri: [
+        {
+          id: 'mk_bousra',
+          title: 'Bousra Waterfall & Valleys',
+          khmer: 'ទឹកជ្រោះប៊ូស្រា មណ្ឌលគិរី',
+          tag: 'Highland Cascades',
+          image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDVrqodwR26dkVSh-6Si8ovF_fTIk-eTv3oi_Wpg82pyQah6tMCAR7aFCLcnDo3b78TX_Jbnu6rzc_5OnjiD45zWd6nH0kx2CwppWVg0a2wt6CY5HQQvHhMbTp7Yt5rQLXCzMfznODEl4TBQvjf2-TguqoT5ssID7DsdmsKrlk0eNtjvpOAsutv67drMhlW_72DAa7KRmTXDkQ0bq80p0SDx1SdAqNuUACB7A_pgdc',
+          elevation: '780m',
+          distance: '375 km',
+          duration: '6h 15m',
+          elevDelta: '+765 m',
+          highway: 'NR76 + Laterite Spur',
+          conditionBadge: '4WD Only · Red Laterite Track',
+          passIndex: '65%',
+          passLabel: '4WD Only',
+          goodPct: 55,
+          cautionPct: 30,
+          badPct: 15,
+          targetLat: 12.5650,
+          targetLng: 107.4100,
+          advisory: 'កំណាត់ផ្លូវចូលទឹកជ្រោះប៊ូស្រាមានដីក្រហម និងគ្រលុក។ រថយន្តប៉ុងពីរ (4WD) ផ្តល់ផាសុកភាពល្អបំផុត។',
+          midpointCoords: [12.4558, 107.1881],
+          midpointText: 'Sen Monorom Pine Ridge Spur',
+          corridorSegments: [
+            { points: [
+                [11.5564, 104.9282],
+                [11.9924, 105.4645], // Kampong Cham
+                [12.1800, 106.0000],
+                [12.4881, 106.0188], // Kratie
+                [12.4558, 107.1881]  // Sen Monorom
+              ], type: 'optimal', color: '#059669' },
+            { points: [
+                [12.4558, 107.1881],
+                [12.5100, 107.3000],
+                [12.5650, 107.4100]  // Bousra Waterfall
+              ], type: 'rough', color: '#e11d48' }
+          ],
+          maneuvers: [
+            { dist: 'In 3.2 km', hwy: 'NR76', en: 'Engage 4WD drive mode on Bousra red laterite spur', km: 'ដាក់លេខប៉ុងពីរ (4WD) លើផ្លូវដីក្រហមប៊ូស្រា', icon: 'warning', speed: 32, limit: 40, sector: '4WD Red Laterite Track', sectorKm: 'ផ្លូវដីក្រហមរលាក់ 4WD' }
+          ]
+        }
+      ]
+    };
+
+    // ACTIVE STATE SYSTEM
+    let map = null;
+    let tileLayer = null;
+    let activeProvinceId = 'siem_reap';
+    let activeDestinationId = 'sr_angkor';
+    let currentMapTile = 'topo-esri';
+    let currentLang = 'km';
+
+    // Markers and Layers in Leaflet
+    let provinceMarkers = [];
+    let routePolylineLayers = [];
+    let midpointMarker = null;
+    let animatedVehicleMarker = null;
+
+    // Flattened route coordinates for the current active route
+    let currentRouteCoords = [];
+
+    // NAVIGATION & SIMULATION ENGINE STATE
+    let isNavActive = false;
+    let isNavPaused = false;
+    let simSpeedMultiplier = 1; // 1x, 5x, 10x
+    let simProgress = 0; // 0.0 to 1.0
+    let simAnimationRequest = null;
+    let simulatedTotalKm = 314;
+
+    // INITIALIZATION ON LOAD
+    window.addEventListener('DOMContentLoaded', () => {
+      initLeafletMap();
+      renderQuickProvincesBar();
+      selectProvince('siem_reap');
+
+      // Click outside listener for dropdown
+      document.addEventListener('click', (e) => {
+        const drop = document.getElementById('layerSwitcherDropdown');
+        const trigger = document.getElementById('layerSwitcherBtn');
+        if (drop && trigger && !trigger.contains(e.target) && !drop.contains(e.target)) {
+          drop.classList.add('hidden');
+        }
+      });
+    });
+
+    // 1. LEAFLET REAL MAP INITIALIZATION - WATERMARK-FREE ESRI WORLD MAP SERVERS
+    function initLeafletMap() {
+      // Centered on Cambodia with crisp national overview
+      map = L.map('map', {
+        center: [12.5657, 104.9910],
+        zoom: 7.5,
+        zoomControl: false, // Custom floating controls
+        attributionControl: true
+      });
+
+      // Default Esri World Topo Map (Clean, high fidelity, 100% free of watermark issues)
+      tileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19,
+        attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, METI'
+      }).addTo(map);
+
+      // Add all province interactive markers
+      renderLeafletProvinceMarkers();
+    }
+
+    // MAP TILE LAYER SWITCHER
+    function toggleLayerMenu() {
+      const drop = document.getElementById('layerSwitcherDropdown');
+      drop.classList.toggle('hidden');
+    }
+
+    function selectMapTileLayer(tileKey) {
+      currentMapTile = tileKey;
+      if (tileLayer) map.removeLayer(tileLayer);
+
+      if (tileKey === 'topo-esri') {
+        tileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 19,
+          attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, USGS, METI'
+        }).addTo(map);
+        document.getElementById('activeLayerLabel').textContent = 'Esri World Topo';
+      } else if (tileKey === 'street-esri') {
+        tileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 19,
+          attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN'
+        }).addTo(map);
+        document.getElementById('activeLayerLabel').textContent = 'Esri World Street';
+      } else if (tileKey === 'topo') {
+        tileLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+          maxZoom: 17,
+          attribution: 'Map data: &copy; OSM contributors, SRTM | Style: &copy; OpenTopoMap'
+        }).addTo(map);
+        document.getElementById('activeLayerLabel').textContent = 'OpenTopoMap';
+      } else if (tileKey === 'satellite') {
+        tileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 19,
+          attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+        }).addTo(map);
+        document.getElementById('activeLayerLabel').textContent = 'World Satellite';
+      }
+
+      // Update active highlight styling on all layer options
+      ['topo-esri', 'street-esri', 'topo', 'satellite'].forEach(key => {
+        const btn = document.getElementById(`layerOpt-${key}`);
+        if (btn) {
+          if (key === tileKey) {
+            btn.className = 'w-full text-left p-2 rounded-xl text-xs font-semibold flex items-center justify-between border border-emerald-500 bg-emerald-50/70 text-emerald-950';
+            const dot = btn.querySelector('span:last-child');
+            if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-600';
+          } else {
+            btn.className = 'w-full text-left p-2 rounded-xl text-xs font-semibold flex items-center justify-between border border-slate-200 hover:bg-slate-50 text-slate-800';
+            const dot = btn.querySelector('span:last-child');
+            if (dot) dot.className = 'w-2 h-2 rounded-full bg-slate-300';
+          }
+        }
+      });
+
+      document.getElementById('layerSwitcherDropdown').classList.add('hidden');
+    }
+
+    // 2. RENDER REAL LEAFLET PROVINCE PINS
+    function renderLeafletProvinceMarkers() {
+      // Clear existing markers
+      provinceMarkers.forEach(m => map.removeLayer(m));
+      provinceMarkers = [];
+
+      CAMBODIA_PROVINCES.forEach(p => {
+        const isSel = p.id === activeProvinceId;
+        const isHub = p.id === 'phnom_penh';
+
+        let color = '#047857';
+        if (isHub) color = '#002218';
+        else if (isSel) color = '#059669';
+        else if (p.statusColor === 'amber') color = '#d97706';
+        else if (p.statusColor === 'rose') color = '#e11d48';
+
+        const customIcon = L.divIcon({
+          className: 'custom-province-pin',
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
+          html: `
+            <div style="position:relative;">
+              <div class="pin-pulse-halo" style="background-color: ${color};"></div>
+              <div class="pin-core-dot" style="background-color: ${color}; width: ${isSel ? 16 : 12}px; height: ${isSel ? 16 : 12}px; top: ${isSel ? -8 : -6}px; left: ${isSel ? -8 : -6}px;"></div>
+              <div class="pin-label-pill ${isSel ? 'selected' : ''}">
+                ${isHub ? 'ភ្នំពេញ (Phnom Penh Hub)' : p.nameEn}
+              </div>
+            </div>
+          `
+        });
+
+        const marker = L.marker([p.lat, p.lng], { icon: customIcon }).addTo(map);
+        marker.on('click', () => {
+          selectProvince(p.id);
+        });
+
+        provinceMarkers.push(marker);
+      });
+    }
+
+    // 3. TOP QUICK PROVINCES BAR
+    function renderQuickProvincesBar() {
+      const container = document.getElementById('provincesQuickBar');
+      container.innerHTML = '';
+
+      CAMBODIA_PROVINCES.forEach(p => {
+        const isSel = p.id === activeProvinceId;
+        const btn = document.createElement('button');
+        btn.onclick = () => selectProvince(p.id);
+        btn.className = `px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all flex items-center gap-1.5 ${
+          isSel 
+            ? 'bg-primary text-white shadow-md' 
+            : 'bg-slate-100/90 text-slate-700 hover:bg-slate-200'
+        }`;
+
+        const dotBg = p.statusColor === 'emerald' ? 'bg-emerald-500' : (p.statusColor === 'amber' ? 'bg-amber-500' : 'bg-rose-500');
+
+        btn.innerHTML = `
+          <span class="w-1.5 h-1.5 rounded-full ${dotBg}"></span>
+          <span>${p.nameEn}</span>
+          <span class="text-[10px] font-normal opacity-75 font-km">${p.nameKm.replace('ខេត្ត','').replace('រាជធានី','')}</span>
+        `;
+        container.appendChild(btn);
+      });
+    }
+
+    // 4. SELECT PROVINCE EVENT
+    function selectProvince(provId) {
+      activeProvinceId = provId;
+      const prov = CAMBODIA_PROVINCES.find(p => p.id === provId) || CAMBODIA_PROVINCES[0];
+
+      renderLeafletProvinceMarkers();
+      renderQuickProvincesBar();
+
+      // Update Places Drawer Header
+      document.getElementById('placesDrawerTitle').textContent = prov.nameEn;
+      document.getElementById('placesDrawerKm').textContent = prov.nameKm;
+
+      let destinations = DESTINATIONS_DATA[provId];
+      if (!destinations || destinations.length === 0) {
+        destinations = [
+          {
+            id: `${provId}_center`,
+            title: `${prov.nameEn} Center Hub`,
+            khmer: `តំបន់កណ្តាល ${prov.nameKm}`,
+            tag: 'Provincial Capital',
+            image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAnx-ocuBQ58zgnpIrwq65zCnpBc--y8L8KLLXRoEPZOrDzbJI3PCuDuL_fbvQFvWs9FJseQvcvbGRmJPyKnhd-_nVXZ7KDnP9feasfNFtAL9j1Y7eSpKpz-HUJ5vqRf_SNwBPaaM5Zek3M1pj4xl-3EWpZCzmJd3iRWhqFoaHLXkKeB9xie0jbmqwsRzDYg_Ds-egLGY8gkf2RUptQYhtUwP0X8sleIroj7iHXVY8',
+            elevation: '45m',
+            distance: `${prov.distanceKm} km`,
+            duration: '3h 45m',
+            elevDelta: '+35 m',
+            highway: prov.highway,
+            conditionBadge: `${prov.statusText} · ${prov.highway}`,
+            passIndex: prov.statusColor === 'emerald' ? '92%' : '76%',
+            passLabel: prov.statusText,
+            goodPct: prov.statusColor === 'emerald' ? 88 : 65,
+            cautionPct: prov.statusColor === 'emerald' ? 10 : 25,
+            badPct: prov.statusColor === 'emerald' ? 2 : 10,
+            targetLat: prov.lat,
+            targetLng: prov.lng,
+            advisory: `ផ្លូវឆ្ពោះទៅ ${prov.nameKm} (${prov.highway}) ស្ថិតក្នុងលក្ខខណ្ឌ ${prov.statusText}។ បើកបរដោយការប្រុងប្រយ័ត្ន។`,
+            midpointCoords: [(11.5564 + prov.lat) / 2, (104.9282 + prov.lng) / 2],
+            midpointText: `En route to ${prov.nameEn}`,
+            corridorSegments: [
+              { points: [[11.5564, 104.9282], [(11.5564 + prov.lat)/2, (104.9282 + prov.lng)/2], [prov.lat, prov.lng]], type: 'optimal', color: '#059669' }
+            ],
+            maneuvers: [
+              { dist: 'In 3.0 km', hwy: prov.highway.split(' ')[0], en: `Head toward ${prov.nameEn} on ${prov.highway}`, km: `ឆ្ពោះទៅកាន់ ${prov.nameKm}`, icon: 'straight', speed: 70, limit: 80, sector: prov.statusText, sectorKm: prov.statusText }
+            ]
+          }
+        ];
+      }
+
+      document.getElementById('placesDrawerPlacesCount').textContent = `${destinations.length} Places`;
+      renderDestinationCards(destinations);
+      selectDestination(destinations[0]);
+
+      if (isNavActive) {
+        simProgress = 0;
+      }
+    }
+
+    // 5. DESTINATION CARDS RENDERING
+    function renderDestinationCards(destinations) {
+      const container = document.getElementById('placesCardsContainer');
+      container.innerHTML = '';
+
+      destinations.forEach(dest => {
+        const isSel = dest.id === activeDestinationId;
+        const card = document.createElement('div');
+        card.className = `w-56 shrink-0 rounded-xl p-2 cursor-pointer transition-all border ${
+          isSel 
+            ? 'bg-brand-50/80 border-2 border-brand-600 shadow-md ring-1 ring-brand-500' 
+            : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+        }`;
+
+        card.onclick = () => selectDestination(dest);
+
+        card.innerHTML = `
+          <div class="relative h-20 rounded-lg overflow-hidden mb-1.5 bg-slate-100">
+            <img alt="${dest.title}" class="w-full h-full object-cover" src="${dest.image}"/>
+            <span class="absolute top-1 left-1 bg-black/60 text-white text-[9px] font-mono px-1 py-0.5 rounded">${dest.elevation}</span>
+            <span class="absolute bottom-1 right-1 bg-emerald-600 text-white text-[9px] font-mono font-bold px-1 py-0.5 rounded">${dest.distance}</span>
+          </div>
+          <div>
+            <div class="flex items-center justify-between text-[10px] font-bold text-brand-700 truncate">
+              <span>${dest.tag}</span>
+              <span class="text-slate-400 font-mono">${dest.duration}</span>
+            </div>
+            <h4 class="text-xs font-bold text-slate-900 truncate leading-snug">${dest.title}</h4>
+            <p class="text-[10px] text-slate-500 font-km truncate">${dest.khmer}</p>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // 6. SELECT DESTINATION & DRAW REAL LEAFLET POLYLINES
+    function selectDestination(dest) {
+      activeDestinationId = dest.id;
+      simulatedTotalKm = parseFloat(dest.distance) || 314;
+
+      // Update Card Visuals
+      document.querySelectorAll('#placesCardsContainer > div').forEach((card, idx) => {
+        const d = (DESTINATIONS_DATA[activeProvinceId] || [])[idx] || {};
+        if (d.id === dest.id) {
+          card.className = 'w-56 shrink-0 rounded-xl p-2 cursor-pointer transition-all border bg-brand-50/80 border-2 border-brand-600 shadow-md ring-1 ring-brand-500';
+        } else {
+          card.className = 'w-56 shrink-0 rounded-xl p-2 cursor-pointer transition-all border bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50';
+        }
+      });
+
+      // Update Telemetry sheet
+      document.getElementById('telemetryPlaceTitle').textContent = dest.title;
+      const prov = CAMBODIA_PROVINCES.find(p => p.id === activeProvinceId);
+      document.getElementById('telemetryPlaceKm').textContent = prov ? `(${prov.nameKm})` : '';
+
+      document.getElementById('telemetryDistance').innerHTML = `${dest.distance.replace('km','')} <span class="text-[10px] text-slate-500 font-normal">km</span>`;
+      document.getElementById('telemetryDuration').textContent = dest.duration;
+      document.getElementById('telemetryElev').textContent = dest.elevDelta;
+      document.getElementById('telemetryHighway').textContent = dest.highway.split(' ')[0] + ' ' + (dest.passLabel.includes('Optimal') ? 'Paved' : 'Pass');
+
+      const badge = document.getElementById('telemetryPassBadge');
+      document.getElementById('telemetryPassIndex').textContent = `Passability: ${dest.passIndex} ${dest.passLabel}`;
+      if (dest.passLabel.includes('Optimal')) {
+        badge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[11px] font-bold';
+      } else if (dest.passLabel.includes('4WD')) {
+        badge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-900 text-[11px] font-bold';
+      } else {
+        badge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[11px] font-bold';
+      }
+
+      document.getElementById('telemetryBarGood').style.width = `${dest.goodPct}%`;
+      document.getElementById('telemetryBarCaution').style.width = `${dest.cautionPct}%`;
+      document.getElementById('telemetryBarBad').style.width = `${dest.badPct}%`;
+      document.getElementById('barLblGood').textContent = `${dest.goodPct}% Paved`;
+      document.getElementById('barLblCaution').textContent = `${dest.cautionPct}% Bypass`;
+      document.getElementById('barLblBad').textContent = `${dest.badPct}% Rough`;
+      document.getElementById('telemetryTotalKm').textContent = `${dest.distance} Total`;
+
+      document.getElementById('telemetryAdvisoryText').textContent = dest.advisory;
+
+      // Draw Leaflet Polylines
+      drawLeafletRouteCorridors(dest);
+
+      // Pan/Fit Map View to corridor bounds
+      if (currentRouteCoords.length > 0) {
+        const bounds = L.latLngBounds(currentRouteCoords);
+        map.fitBounds(bounds, { padding: [100, 100], maxZoom: 10 });
+      }
+
+      // Update HTML Midpoint Caution Tag Position
+      updateFloatingCautionTag(dest);
+
+      if (isNavActive) {
+        updateHudTelemetry(dest, simProgress);
+      }
+    }
+
+    function getActiveDestination() {
+      const list = DESTINATIONS_DATA[activeProvinceId] || [];
+      return list.find(d => d.id === activeDestinationId) || list[0];
+    }
+
+    // DRAW ROUTE POLYLINES WITH LIVING STREAM EFFECT ON REAL MAP
+    function drawLeafletRouteCorridors(dest) {
+      // Remove previous polylines
+      routePolylineLayers.forEach(layer => map.removeLayer(layer));
+      routePolylineLayers = [];
+      currentRouteCoords = [];
+
+      const segments = dest.corridorSegments || [];
+      segments.forEach((seg) => {
+        // Concatenate to global corridor coords
+        seg.points.forEach((pt, idx) => {
+          if (currentRouteCoords.length === 0 || 
+              currentRouteCoords[currentRouteCoords.length-1][0] !== pt[0] ||
+              currentRouteCoords[currentRouteCoords.length-1][1] !== pt[1]) {
+            currentRouteCoords.push(pt);
+          }
+        });
+
+        // 1. Base Glow Shadow Polyline
+        const baseLine = L.polyline(seg.points, {
+          color: seg.color,
+          weight: 7,
+          opacity: 0.85,
+          lineCap: 'round',
+          lineJoin: 'round'
+        }).addTo(map);
+        routePolylineLayers.push(baseLine);
+
+        // 2. Animated Dash Stream on top
+        const dashLine = L.polyline(seg.points, {
+          color: '#ffffff',
+          weight: 2.5,
+          opacity: 0.9,
+          dashArray: seg.type === 'caution' ? '8, 8' : '10, 8',
+          className: seg.type === 'caution' ? 'route-caution-stream' : 'route-active-stream'
+        }).addTo(map);
+        routePolylineLayers.push(dashLine);
+      });
+    }
+
+    function updateFloatingCautionTag(dest) {
+      const tag = document.getElementById('midpointCautionTag');
+      if (dest.midpointCoords && map) {
+        tag.style.display = 'block';
+        document.getElementById('midpointCautionTitle').textContent = dest.midpointText || 'Route Caution Zone';
+        
+        // Reposition on map pan/zoom
+        function syncTagPos() {
+          const pt = map.latLngToContainerPoint(dest.midpointCoords);
+          tag.style.left = `${pt.x}px`;
+          tag.style.top = `${pt.y}px`;
+        }
+        map.off('move', syncTagPos);
+        map.on('move', syncTagPos);
+        syncTagPos();
+      } else {
+        tag.style.display = 'none';
+      }
+    }
+
+    // ================= REAL-TIME TURN-BY-TURN NAVIGATION SIMULATION =================
+    function startNavigationMode() {
+      if (!isNavActive) {
+        isNavActive = true;
+        isNavPaused = false;
+        simProgress = 0;
+
+        // Reveal Cockpit HUD & Vehicle Marker
+        document.getElementById('liveTurnByTurnCockpit').classList.remove('hidden');
+
+        // Initialize or Show Animated Leaflet Vehicle Marker
+        createOrShowVehicleMarker();
+
+        // Update Top Sim Button
+        const simBtn = document.getElementById('simVehicleToggleBtn');
+        simBtn.classList.add('border-emerald-600', 'bg-emerald-50', 'text-emerald-900');
+        document.getElementById('simVehicleIcon').textContent = 'pause_circle';
+        document.getElementById('simVehicleLabel').textContent = 'Nav Active';
+        document.getElementById('simVehiclePing').classList.remove('hidden');
+
+        // Update Start CTA label
+        const cta = document.getElementById('startRouteCtaBtn');
+        cta.classList.add('bg-emerald-800');
+
+        runNavigationEngineLoop();
+      }
+    }
+
+    function createOrShowVehicleMarker() {
+      if (!animatedVehicleMarker && currentRouteCoords.length > 0) {
+        const startPt = currentRouteCoords[0];
+        const carIcon = L.divIcon({
+          className: 'vehicle-marker-icon',
+          iconSize: [40, 40],
+          iconAnchor: [20, 20],
+          html: `
+            <div id="leafletCarSimMarker" style="position:relative; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
+              <div style="position:absolute; width:34px; height:34px; border-radius:50%; background:#10b981; opacity:0.3; animation:pulseSoft 1.2s infinite;"></div>
+              <div style="width:26px; height:26px; border-radius:50%; background:#0f382c; border:3px solid #ffffff; box-shadow:0 4px 10px rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; transform:rotate(0deg);" id="carHeadingCompass">
+                <span style="color:#34d399; font-size:16px; font-weight:900; line-height:1;">▲</span>
+              </div>
+              <div style="position:absolute; top:-24px; left:26px; background:#0f172a; color:#ffffff; font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:700; padding:2px 7px; border-radius:6px; border:1px solid #334155; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,0.4);" id="carSpeedTooltip">
+                74 km/h
+              </div>
+            </div>
+          `
+        });
+        animatedVehicleMarker = L.marker(startPt, { icon: carIcon, zIndexOffset: 1000 }).addTo(map);
+      } else if (animatedVehicleMarker && currentRouteCoords.length > 0) {
+        animatedVehicleMarker.setLatLng(currentRouteCoords[0]);
+      }
+    }
+
+    function toggleNavSimulation() {
+      if (isNavActive) {
+        stopNavigationMode();
+      } else {
+        startNavigationMode();
+      }
+    }
+
+    function stopNavigationMode() {
+      isNavActive = false;
+      isNavPaused = false;
+      simProgress = 0;
+
+      document.getElementById('liveTurnByTurnCockpit').classList.add('hidden');
+      if (animatedVehicleMarker) {
+        map.removeLayer(animatedVehicleMarker);
+        animatedVehicleMarker = null;
+      }
+
+      const simBtn = document.getElementById('simVehicleToggleBtn');
+      simBtn.classList.remove('border-emerald-600', 'bg-emerald-50', 'text-emerald-900');
+      document.getElementById('simVehicleIcon').textContent = 'play_circle';
+      document.getElementById('simVehicleLabel').textContent = 'Live GPS Sim';
+      document.getElementById('simVehiclePing').classList.add('hidden');
+
+      const cta = document.getElementById('startRouteCtaBtn');
+      cta.classList.remove('bg-emerald-800');
+
+      if (simAnimationRequest) cancelAnimationFrame(simAnimationRequest);
+    }
+
+    function toggleNavPause() {
+      isNavPaused = !isNavPaused;
+      const pauseIcon = document.getElementById('hudPauseIcon');
+      const pauseLabel = document.getElementById('hudPauseLabel');
+
+      if (isNavPaused) {
+        pauseIcon.textContent = 'play_arrow';
+        pauseLabel.textContent = 'Resume';
+      } else {
+        pauseIcon.textContent = 'pause';
+        pauseLabel.textContent = 'Pause';
+        runNavigationEngineLoop();
+      }
+    }
+
+    function setSimSpeed(mult) {
+      simSpeedMultiplier = mult;
+      ['1x', '5x', '10x'].forEach(s => {
+        const btn = document.getElementById(`spd${s}Btn`);
+        if (s === `${mult}x`) {
+          btn.className = 'px-2 py-0.5 text-[10px] font-bold rounded-lg bg-emerald-700 text-white';
+        } else {
+          btn.className = 'px-2 py-0.5 text-[10px] font-bold rounded-lg text-slate-400 hover:text-white';
+        }
+      });
+    }
+
+    // MAIN NAVIGATION INTERPOLATION LOOP ACROSS REAL GPS LEAFLET WAYPOINTS
+    function runNavigationEngineLoop() {
+      if (!isNavActive || isNavPaused) return;
+
+      if (currentRouteCoords.length > 1) {
+        // Advance simulation progress based on speed multiplier
+        const baseSpeedStep = 0.0016;
+        simProgress += baseSpeedStep * simSpeedMultiplier;
+        if (simProgress >= 1) simProgress = 0; // loop trip
+
+        // Compute current position along polyline segments
+        const totalSegments = currentRouteCoords.length - 1;
+        const exactIndex = simProgress * totalSegments;
+        const currIndex = Math.floor(exactIndex);
+        const segmentT = exactIndex - currIndex;
+
+        const p1 = currentRouteCoords[currIndex];
+        const p2 = currentRouteCoords[Math.min(currIndex + 1, totalSegments)];
+
+        if (p1 && p2) {
+          const currentLat = p1[0] + (p2[0] - p1[0]) * segmentT;
+          const currentLng = p1[1] + (p2[1] - p1[1]) * segmentT;
+
+          // Calculate vehicle heading
+          const dLat = p2[0] - p1[0];
+          const dLng = p2[1] - p1[1];
+          const angle = Math.atan2(dLng, dLat) * (180 / Math.PI);
+
+          if (animatedVehicleMarker) {
+            animatedVehicleMarker.setLatLng([currentLat, currentLng]);
+
+            const compass = document.getElementById('carHeadingCompass');
+            if (compass) compass.style.transform = `rotate(${angle}deg)`;
+          }
+
+          // Smooth camera panning when simulation is running
+          if (simProgress % 0.1 < 0.002) {
+            map.panTo([currentLat, currentLng], { animate: true, duration: 0.5 });
+          }
+
+          // Update HUD Telemetry
+          const dest = getActiveDestination();
+          if (dest) {
+            updateHudTelemetry(dest, simProgress);
+          }
+        }
+      }
+
+      simAnimationRequest = requestAnimationFrame(runNavigationEngineLoop);
+    }
+
+    function updateHudTelemetry(dest, progress = 0) {
+      const maneuvers = dest.maneuvers || [];
+      let mIdx = 0;
+      if (maneuvers.length > 1) {
+        if (progress > 0.6) mIdx = maneuvers.length - 1;
+        else if (progress > 0.3) mIdx = 1;
+      }
+      const curM = maneuvers[mIdx] || maneuvers[0] || {
+        dist: 'In 2 km', hwy: 'NR6', en: 'Continue on current route', km: 'បន្តដំណើរតាមផ្លូវជាតិ', icon: 'straight', speed: 74, limit: 90, sector: 'Optimal NR6', sectorKm: 'កៅស៊ូល្អរលូន'
+      };
+
+      // Maneuver banner
+      document.getElementById('hudManeuverIcon').textContent = curM.icon;
+      document.getElementById('hudManeuverDist').textContent = curM.dist;
+      document.getElementById('hudManeuverHwy').textContent = curM.hwy;
+      document.getElementById('hudManeuverPrimaryText').textContent = curM.en;
+      document.getElementById('hudManeuverKhmerText').textContent = curM.km;
+
+      // Speed Fluctuations
+      const speedOffset = Math.sin(progress * 40) * 5;
+      const liveSpeed = Math.max(25, Math.round(curM.speed + speedOffset));
+      document.getElementById('hudSpeedVal').innerHTML = `${liveSpeed} <span class="text-[10px] text-slate-400 font-normal">km/h</span>`;
+      
+      const speedTooltip = document.getElementById('carSpeedTooltip');
+      if (speedTooltip) speedTooltip.textContent = `${liveSpeed} km/h`;
+
+      document.getElementById('hudSpeedLimit').textContent = `Limit: ${curM.limit}`;
+
+      // Remaining distance countdown
+      const remainingKm = Math.max(0, Math.round(simulatedTotalKm * (1 - progress)));
+      document.getElementById('hudRemainDist').innerHTML = `${remainingKm} <span class="text-[10px] text-slate-400 font-normal">km</span>`;
+      document.getElementById('hudDistancePct').textContent = `${Math.round(progress * 100)}% Traveled`;
+
+      // ETA remaining minutes calculation
+      const avgSpeed = 70;
+      const hoursRem = remainingKm / avgSpeed;
+      const h = Math.floor(hoursRem);
+      const m = Math.floor((hoursRem - h) * 60);
+      document.getElementById('hudEtaClock').textContent = `${h}h ${m < 10 ? '0' : ''}${m}m`;
+
+      // Surface Sector updates
+      document.getElementById('hudSurfaceSector').textContent = curM.sector;
+      document.getElementById('hudSurfaceSub').textContent = curM.sectorKm;
+
+      // Synchronize docked footer remaining display
+      document.getElementById('telemetryDistance').innerHTML = `${remainingKm} <span class="text-[10px] text-slate-500 font-normal">km rem</span>`;
+    }
+
+    // SEARCH & FILTER PROVINCES
+    function filterProvinces(query) {
+      if (!query || query.trim() === '') {
+        renderQuickProvincesBar();
+        return;
+      }
+      const q = query.toLowerCase().trim();
+      const matched = CAMBODIA_PROVINCES.filter(p => 
+        p.nameEn.toLowerCase().includes(q) || 
+        p.nameKm.includes(q)
+      );
+
+      const container = document.getElementById('provincesQuickBar');
+      container.innerHTML = '';
+
+      matched.forEach(p => {
+        const isSel = p.id === activeProvinceId;
+        const btn = document.createElement('button');
+        btn.onclick = () => selectProvince(p.id);
+        btn.className = `px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all flex items-center gap-1.5 ${
+          isSel 
+            ? 'bg-primary text-white shadow-md' 
+            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+        }`;
+        btn.innerHTML = `<span>${p.nameEn}</span><span class="text-[10px] opacity-75 font-km">${p.nameKm}</span>`;
+        container.appendChild(btn);
+      });
+
+      if (matched.length > 0) {
+        selectProvince(matched[0].id);
+      }
+    }
+
+    // MAP VIEWPORT CONTROLS
+    function handleMapZoom(delta) {
+      if (map) {
+        if (delta > 0) map.zoomIn();
+        else map.zoomOut();
+      }
+    }
+
+    function recenterMap() {
+      if (currentRouteCoords.length > 0 && map) {
+        const bounds = L.latLngBounds(currentRouteCoords);
+        map.fitBounds(bounds, { padding: [80, 80] });
+      } else if (map) {
+        map.setView([12.5657, 104.9910], 7.5);
+      }
+    }
+
+    function switchLang(lang) {
+      currentLang = lang;
+      const kmBtn = document.getElementById('langBtnKm');
+      const enBtn = document.getElementById('langBtnEn');
+      if (lang === 'km') {
+        kmBtn.className = 'px-3 py-1 rounded-xl bg-primary text-white font-km transition-all';
+        enBtn.className = 'px-3 py-1 rounded-xl text-slate-600 hover:text-slate-900 transition-all';
+      } else {
+        enBtn.className = 'px-3 py-1 rounded-xl bg-primary text-white transition-all';
+        kmBtn.className = 'px-3 py-1 rounded-xl text-slate-600 hover:text-slate-900 font-km transition-all';
+      }
+    }
+  </script>
+</body></html>
